@@ -10,10 +10,11 @@ from PhysicsTools.NanoAODTools.postprocessing.modules.jme.jetSmearer import jetS
 from PhysicsTools.NanoAODTools.postprocessing.modules.jme.JetReCalibrator import JetReCalibrator
 
 class jetmetUncertaintiesProducer(Module):
-    def __init__(self, era, globalTag, jesUncertainties = [ "Total" ], jetType = "AK4PFchs", redoJEC=False, noGroom=False):
+    def __init__(self, era, globalTag, jesUncertainties = [ "Total" ], jetType = "AK4PFchs", redoJEC=False, doResiduals=True, noGroom=False):
 
         self.era = era
-	self.redoJEC = redoJEC
+        self.redoJEC = redoJEC
+        self.doResiduals = doResiduals
         self.noGroom = noGroom
         #--------------------------------------------------------------------------------------------
         # CV: globalTag and jetType not yet used, as there is no consistent set of txt files for
@@ -81,7 +82,7 @@ class jetmetUncertaintiesProducer(Module):
             
 
 	if self.redoJEC :
-	    self.jetReCalibrator = JetReCalibrator(globalTag, jetType , True, self.jesInputFilePath, calculateSeparateCorrections = False, calculateType1METCorrection  = False)
+	    self.jetReCalibrator = JetReCalibrator(globalTag, jetType , self.doResiduals, self.jesInputFilePath, calculateSeparateCorrections = False, calculateType1METCorrection  = False)
 	
 
         # define energy threshold below which jets are considered as "unclustered energy"
