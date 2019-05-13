@@ -80,7 +80,7 @@ class METminProducer(Module):
                     alpha_j     = max(min(alpha_j,1),0)
                     MET_min_pt_j   = math.sqrt((MET_x - (alpha_j-1) * EE_jet['neEmEF']*Jet_x)**2 + (MET_y - (alpha_j-1) * EE_jet['neEmEF'] * Jet_y)**2)
                     MET_min_phi_j  = math.atan2( MET_y - (alpha_j-1) * EE_jet['neEmEF']*Jet_y, MET_x - (alpha_j-1) * EE_jet['neEmEF']*Jet_x )
-                    MET_min.append( ( MET_min_j, MET_min_phi_j) )
+                    MET_min.append( ( MET_min_pt_j, MET_min_phi_j) )
 
             nEE_jets = min(len(EE_jets), 6) # build pseudo-jets out of combinations of maximum 6 jets
             for i in range(2,nEE_jets+1):
