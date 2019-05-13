@@ -109,7 +109,7 @@ class METminProducer(Module):
                     alpha_j     = max(min(alpha_j,1),0)
                     MET_min_pt_j  = math.sqrt ((MET_x - (alpha_j-1) * pseudoJet_neEmEF * pseudoJet_x)**2 + (MET_y - (alpha_j-1) * pseudoJet_neEmEF * pseudoJet_y)**2)
                     MET_min_phi_j = math.atan2( MET_y - (alpha_j-1) * pseudoJet_neEmEF * pseudoJet_y,       MET_x - (alpha_j-1) * pseudoJet_neEmEF * pseudoJet_x)
-                    MET_min.append( (MET_min_j, MET_min_phi_j) )
+                    MET_min.append( (MET_min_pt_j, MET_min_phi_j) )
 
             if len(MET_min)>0:
                 MET_pt_min, MET_phi_min = min(MET_min, key = lambda m:m[0])
