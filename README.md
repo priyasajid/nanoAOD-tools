@@ -87,4 +87,3 @@ python scripts/nano_postproc.py outDir /eos/cms/store/user/andrey/f.root -I Phys
 ```
 This module has the same structure of its producer as `exampleProducer`, but in addition it utilizes a C++ code to calculate the mht variable, `src/mhtjuProducerCppWorker.cc`. This code is loaded in the `__init__` method of the producer.
 
-
