@@ -1,5 +1,5 @@
 import ROOT
-import math, os,re,copy
+import math, os,re, tarfile, tempfile
 import numpy as np
 ROOT.PyConfig.IgnoreCommandLineOptions = True
 
@@ -9,10 +9,8 @@ from PhysicsTools.NanoAODTools.postprocessing.tools import matchObjectCollection
 from PhysicsTools.NanoAODTools.postprocessing.modules.jme.JetReCalibrator import JetReCalibrator
 
 class jetRecalib(Module):
-    def __init__(self,  globalTag, jetType = "AK4PFchs", METBranchName="MET", unclEnThreshold=15):
+    def __init__(self,  globalTag, archive, jetType = "AK4PFchs"):
 
-        self.metBranchName = METBranchName
-        self.unclEnThreshold = unclEnThreshold
         if "AK4" in jetType : 
             self.jetBranchName = "Jet"
         elif "AK8" in jetType :
@@ -21,16 +19,16 @@ class jetRecalib(Module):
         else:
             raise ValueError("ERROR: Invalid jet type = '%s'!" % jetType)
         self.rhoBranchName = "fixedGridRhoFastjetAll"
-        self.lenVar = "n" + self.jetBranchName
-        # To do : change to real values
-        self.jmsVals = [1.00, 0.99, 1.01]
-        
+        self.lenVar = "n" + self.jetBranchName        
 
-        self.jesInputFilePath = os.environ['CMSSW_BASE'] + "/src/PhysicsTools/NanoAODTools/data/jme/"
+        self.jesInputArchivePath = os.environ['CMSSW_BASE'] + "/src/PhysicsTools/NanoAODTools/data/jme/"
+        # Text files are now tarred so must extract first into temporary directory (gets deleted during python memory management at script exit)
+        self.jesArchive = tarfile.open(self.jesInputArchivePath+archive+".tgz", "r:gz")
+        self.jesInputFilePath = tempfile.mkdtemp()
+        self.jesArchive.extractall(self.jesInputFilePath)
 
         self.jetReCalibrator = JetReCalibrator(globalTag, jetType , True, self.jesInputFilePath, calculateSeparateCorrections = False, calculateType1METCorrection  = False)
-
-        self.jetReCalibratorL1 = JetReCalibrator(globalTag, jetType , False, self.jesInputFilePath, calculateSeparateCorrections = True, calculateType1METCorrection  = False, upToLevel=1)
+	
         # load libraries for accessing JES scale factors and uncertainties from txt files
         for library in [ "libCondFormatsJetMETObjects", "libPhysicsToolsNanoAODTools" ]:
             if library not in ROOT.gSystem.GetLibraries():
@@ -45,9 +43,12 @@ class jetRecalib(Module):
 
     def beginFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
         self.out = wrappedOutputTree
+        self.out.branch("%s_pt_raw" % self.jetBranchName, "F", lenVar=self.lenVar)
         self.out.branch("%s_pt_nom" % self.jetBranchName, "F", lenVar=self.lenVar)
-        self.out.branch("%s_pt_nom"%self.metBranchName , "F")
-        self.out.branch("%s_phi_nom"%self.metBranchName, "F")
+        self.out.branch("%s_mass_raw" % self.jetBranchName, "F", lenVar=self.lenVar)
+        self.out.branch("%s_mass_nom" % self.jetBranchName, "F", lenVar=self.lenVar)
+        self.out.branch("MET_pt_nom" , "F")
+        self.out.branch("MET_phi_nom", "F")
             
                         
     def endFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
@@ -55,124 +56,79 @@ class jetRecalib(Module):
     
     def analyze(self, event):
         """process event, return True (go to next module) or False (fail, go to next event)"""
-        jets    = Collection(event, self.jetBranchName )
-        met     = Object(event, self.metBranchName) 
-        rawmet  = Object(event, "RawMET") 
-        defmet  = Object(event, "MET") 
-        muons   = Collection(event, "Muon") 
+        jets = Collection(event, self.jetBranchName )
+        met = Object(event, "MET") 
 
+        jets_pt_raw = []
         jets_pt_nom = []
-        ( met_px,         met_py        ) = ( met.pt*math.cos(met.phi),         met.pt*math.sin(met.phi) )
-        ( def_met_px,     def_met_py    ) = ( defmet.pt*math.cos(defmet.phi),   defmet.pt*math.sin(defmet.phi) )
-        ( raw_met_px,     raw_met_py    ) = ( rawmet.pt*math.cos(rawmet.phi),   rawmet.pt*math.sin(rawmet.phi) )
-
+        jets_mass_raw = []
+        jets_mass_nom = []
+        ( met_px,         met_py         ) = ( met.pt*math.cos(met.phi), met.pt*math.sin(met.phi) )
+        ( met_px_nom, met_py_nom ) = ( met_px, met_py )
+        met_px_nom = met_px
+        met_py_nom = met_py
+                
         rho = getattr(event, self.rhoBranchName)
-
-        met_shift_x, met_shift_y = 0., 0.
-        delta_x_T1Jet, delta_y_T1Jet = 0, 0
-        delta_x_rawJet, delta_y_rawJet = 0, 0
-
+        
         for jet in jets:
-            # copy the jet_pt from the tuple
-            jet_pt          = jet.pt
-            rawFactor       = jet.rawFactor
-            # get the raw jet pt
-            jet_pt_raw      = jet.pt*(1 - jet.rawFactor)
-            # get the corrected jet pt
-            jet_pt_nom      = self.jetReCalibrator.correct(jet,rho)
+            jet_pt_raw = jet.pt*(1.-jet.rawFactor) #save raw jet pt
+            jets_pt_raw.append(jet_pt_raw)
 
-            newjet = ROOT.TLorentzVector()
-            newjet.SetPtEtaPhiM(jet.pt*(1-jet.rawFactor), jet.eta, jet.phi, jet.mass )
-            muon_pt = 0
-            if jet.muonIdx1>-1:
-                newjet = newjet - muons[jet.muonIdx1].p4()
-                muon_pt += muons[jet.muonIdx1].pt
-            if jet.muonIdx2>-1:
-                newjet = newjet - muons[jet.muonIdx2].p4()
-                muon_pt += muons[jet.muonIdx2].pt
+            jet_mass_raw = jet.mass*(1.-jet.rawFactor) #save raw jet mass
+            jets_mass_raw.append(jet_mass_raw)
 
-            jet.pt              = newjet.Pt()
-            jet.rawFactor       = 0
-            jet_pt_noMuL1L2L3   = self.jetReCalibrator.correct(jet,rho)   if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
-            jet_pt_noMuL1       = self.jetReCalibratorL1.correct(jet,rho) if self.jetReCalibrator.correct(jet,rho) > self.unclEnThreshold else jet.pt # only correct the non-mu fraction of the jet if it's above 15 GeV, otherwise take the raw pt
-
-
-            # only correct the non-muon fraction of the jet for T1 MET. in fact, muon_pt should cancel out
-            jet_pt_L1L2L3   = jet_pt_noMuL1L2L3 + muon_pt 
-            jet_pt_L1       = jet_pt_noMuL1     + muon_pt 
-
+	    jet_pt=jet.pt
+            (jet_pt, jet_mass) = self.jetReCalibrator.correct(jet,rho)
+            jet_pt_nom           = jet_pt # don't smear resolution in data
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
             jets_pt_nom    .append(jet_pt_nom)
 
-            if self.metBranchName == 'METFixEE2017':
-                # get the delta for removing L1L2L3-L1 corrected jets in the EE region from the default MET branch.
-                # Right now this will only be correct if we reapply the same JECs,
-                # because there's no way to extract the L1L2L3 and L1 corrections that were actually used as input to the stored type1 MET...
-                if jet_pt_L1L2L3 > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet_pt_raw < 50:
-                    delta_x_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.cos(jet.phi) + jet_pt_raw * math.cos(jet.phi)#jet_pt_raw * math.cos(jet.phi)
-                    delta_y_T1Jet  += (jet_pt_L1L2L3-jet_pt_L1) * math.sin(jet.phi) + jet_pt_raw * math.sin(jet.phi)#jet_pt_raw * math.sin(jet.phi)
+            jet_mass_nom         = jet_mass
+            if jet_mass_nom < 0.0:
+                jet_mass_nom *= -1.0
+            jets_mass_nom    .append(jet_mass_nom)
 
-                # get the delta for removing raw jets in the EE region from the raw MET
-                #if jet.pt > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet.pt < 50:
-                if jet_pt_L1L2L3 > self.unclEnThreshold and 2.65<abs(jet.eta)<3.14 and jet_pt_raw < 50:
-                    delta_x_rawJet += jet_pt_raw * math.cos(jet.phi)#jet_pt_raw * math.cos(jet.phi)
-                    delta_y_rawJet += jet_pt_raw * math.sin(jet.phi)#jet_pt_raw * math.sin(jet.phi)
-
-            ## setting jet back to original values
-            jet.pt          = jet_pt
-            jet.rawFactor   = rawFactor
-
-            #print
-            #print "Next jet with:"
-            #print "{:10}{:<10.2f}".format("raw pt", jet_pt_raw)
-            #print "{:10}{:<10.2f}{:10}{:<10.2f}{:10}{:<10.2f}{:10}{:<10.2f}{:10}{:<10.2f}".format("L1L2L3 pt", jet_pt_L1L2L3, "L1 pt", jet_pt_L1, "muEF", jet.muEF, "chEmEF", jet.chEmEF, "neEmEF", jet.neEmEF)
-
-            # only use jets with pt>15 GeV and EMF < 0.9 for T1 MET
-            if jet_pt_L1L2L3 > self.unclEnThreshold and (jet.neEmEF+jet.chEmEF) < 0.9: # which one to use?
+            if jet_pt_nom > 15.:
                 jet_cosPhi = math.cos(jet.phi)
                 jet_sinPhi = math.sin(jet.phi)
-                if not ( self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet.pt*(1 - jet.rawFactor) < 50):
-
-                    met_shift_x += (jet_pt_L1 - jet_pt_L1L2L3) * jet_cosPhi
-                    met_shift_y += (jet_pt_L1 - jet_pt_L1L2L3) * jet_sinPhi
-                    #print "{:10}{:<10.2f}{:10}{:<10.3f}".format("L1 x", jet_pt_L1*jet_cosPhi, "L1L2L3 x", jet_pt_L1L2L3*jet_cosPhi)
-                    #print "{:10}{:<10.2f}{:10}{:<10.3f}".format("L1 y", jet_pt_L1*jet_sinPhi, "L1L2L3 y", jet_pt_L1L2L3*jet_sinPhi)
-                    #print "{:10}{:<10.2f}{:10}{:<10.3f}{:10}{:<10.3f}".format("jet pt", jet_pt_L1L2L3, "x_shift", met_shift_x, "y_shift", met_shift_y)
-
-
-        if self.metBranchName == 'METFixEE2017':
-            # Remove the L1L2L3-L1 corrected jets in the EE region from the default MET branch
-            def_met_px += delta_x_T1Jet
-            def_met_py += delta_y_T1Jet
-
-            # Remove raw jets in the EE region from RawMET
-            raw_met_px += delta_x_rawJet
-            raw_met_py += delta_y_rawJet
-
-            # get unclustered energy part that is removed in the v2 recipe
-            met_unclEE_x = def_met_px - met_px
-            met_unclEE_y = def_met_py - met_py
-
-            # finalize the v2 recipe for the rawMET by removing the unclustered part in the EE region
-            raw_met_px -= met_unclEE_x
-            raw_met_py -= met_unclEE_y
-
-
-        met_px_nom = raw_met_px + met_shift_x
-        met_py_nom = raw_met_py + met_shift_y
-
+                met_px_nom = met_px_nom - (jet_pt_nom - jet.pt)*jet_cosPhi
+                met_py_nom = met_py_nom - (jet_pt_nom - jet.pt)*jet_sinPhi
+        self.out.fillBranch("%s_pt_raw" % self.jetBranchName, jets_pt_raw)
         self.out.fillBranch("%s_pt_nom" % self.jetBranchName, jets_pt_nom)
-        self.out.fillBranch("%s_pt_nom" % self.metBranchName, math.sqrt(met_px_nom**2 + met_py_nom**2))
-        self.out.fillBranch("%s_phi_nom" % self.metBranchName, math.atan2(met_py_nom, met_px_nom))        
+        self.out.fillBranch("%s_mass_raw" % self.jetBranchName, jets_mass_raw)
+        self.out.fillBranch("%s_mass_nom" % self.jetBranchName, jets_mass_nom)
+        self.out.fillBranch("MET_pt_nom", math.sqrt(met_px_nom**2 + met_py_nom**2))
+        self.out.fillBranch("MET_phi_nom", math.atan2(met_py_nom, met_px_nom))        
 
         return True
 
 
 # define modules using the syntax 'name = lambda : constructor' to avoid having them loaded when not needed
+jetRecalib2016BCD = lambda : jetRecalib("Summer16_07Aug2017BCD_V11_DATA","Summer16_07Aug2017_V11_DATA")
+jetRecalib2016EF = lambda : jetRecalib("Summer16_07Aug2017EF_V11_DATA","Summer16_07Aug2017_V11_DATA")
+jetRecalib2016GH = lambda : jetRecalib("Summer16_07Aug2017GH_V11_DATA","Summer16_07Aug2017_V11_DATA")
 
-jetRecalib2017B = lambda : jetRecalib("Fall17_17Nov2017B_V6_DATA")
-jetRecalib2017C = lambda : jetRecalib("Fall17_17Nov2017C_V6_DATA")
-jetRecalib2017D = lambda : jetRecalib("Fall17_17Nov2017D_V6_DATA")
-jetRecalib2017E = lambda : jetRecalib("Fall17_17Nov2017E_V6_DATA")
-jetRecalib2017F = lambda : jetRecalib("Fall17_17Nov2017F_V6_DATA")
+jetRecalib2016BCDAK8Puppi = lambda : jetRecalib("Summer16_07Aug2017BCD_V11_DATA","Summer16_07Aug2017_V11_DATA", jetType="AK8PFPuppi")
+jetRecalib2016EFAK8Puppi = lambda : jetRecalib("Summer16_07Aug2017EF_V11_DATA","Summer16_07Aug2017_V11_DATA", jetType="AK8PFPuppi")
+jetRecalib2016GHAK8Puppi = lambda : jetRecalib("Summer16_07Aug2017GH_V11_DATA","Summer16_07Aug2017_V11_DATA",jetType="AK8PFPuppi")
+
+jetRecalib2017B = lambda : jetRecalib("Fall17_17Nov2017B_V32_DATA","Fall17_17Nov2017_V32_DATA")
+jetRecalib2017C = lambda : jetRecalib("Fall17_17Nov2017C_V32_DATA","Fall17_17Nov2017_V32_DATA")
+jetRecalib2017DE = lambda : jetRecalib("Fall17_17Nov2017DE_V32_DATA","Fall17_17Nov2017_V32_DATA")
+jetRecalib2017F = lambda : jetRecalib("Fall17_17Nov2017F_V32_DATA","Fall17_17Nov2017_V32_DATA")
+
+jetRecalib2017BAK8Puppi = lambda : jetRecalib("Fall17_17Nov2017B_V32_DATA","Fall17_17Nov2017_V32_DATA",jetType="AK8PFPuppi")
+jetRecalib2017CAK8Puppi = lambda : jetRecalib("Fall17_17Nov2017C_V32_DATA","Fall17_17Nov2017_V32_DATA",jetType="AK8PFPuppi")
+jetRecalib2017DEAK8Puppi = lambda : jetRecalib("Fall17_17Nov2017DE_V32_DATA","Fall17_17Nov2017_V32_DATA", jetType="AK8PFPuppi")
+jetRecalib2017FAK8Puppi = lambda : jetRecalib("Fall17_17Nov2017F_V32_DATA","Fall17_17Nov2017_V32_DATA",jetType="AK8PFPuppi")
+
+jetRecalib2018A = lambda : jetRecalib("Autumn18_RunA_V8_DATA","Autumn18_V8_DATA")
+jetRecalib2018B = lambda : jetRecalib("Autumn18_RunB_V8_DATA","Autumn18_V8_DATA")
+jetRecalib2018C = lambda : jetRecalib("Autumn18_RunC_V8_DATA","Autumn18_V8_DATA")
+jetRecalib2018D = lambda : jetRecalib("Autumn18_RunD_V8_DATA","Autumn18_V8_DATA")
+
+jetRecalib2018AAK8Puppi = lambda : jetRecalib("Autumn18_RunA_V8_DATA","Autumn18_V8_DATA",jetType="AK8PFPuppi")
+jetRecalib2018BAK8Puppi = lambda : jetRecalib("Autumn18_RunB_V8_DATA","Autumn18_V8_DATA",jetType="AK8PFPuppi")
+jetRecalib2018CAK8Puppi = lambda : jetRecalib("Autumn18_RunC_V8_DATA","Autumn18_V8_DATA",jetType="AK8PFPuppi")
+jetRecalib2018DAK8Puppi = lambda : jetRecalib("Autumn18_RunD_V8_DATA","Autumn18_V8_DATA",jetType="AK8PFPuppi")
