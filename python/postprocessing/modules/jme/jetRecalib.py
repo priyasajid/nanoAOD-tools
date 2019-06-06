@@ -9,7 +9,7 @@ from PhysicsTools.NanoAODTools.postprocessing.tools import matchObjectCollection
 from PhysicsTools.NanoAODTools.postprocessing.modules.jme.JetReCalibrator import JetReCalibrator
 
 class jetRecalib(Module):
-    def __init__(self,  globalTag, archive, jetType = "AK4PFchs"):
+    def __init__(self,  globalTag, archive, jetType = "AK4PFchs", METBranchName="MET"):
 
         if "AK4" in jetType : 
             self.jetBranchName = "Jet"
@@ -20,6 +20,7 @@ class jetRecalib(Module):
             raise ValueError("ERROR: Invalid jet type = '%s'!" % jetType)
         self.rhoBranchName = "fixedGridRhoFastjetAll"
         self.lenVar = "n" + self.jetBranchName        
+        self.metBranchName = METBranchName
 
         self.jesInputArchivePath = os.environ['CMSSW_BASE'] + "/src/PhysicsTools/NanoAODTools/data/jme/"
         # Text files are now tarred so must extract first into temporary directory (gets deleted during python memory management at script exit)
@@ -47,8 +48,8 @@ class jetRecalib(Module):
         self.out.branch("%s_pt_nom" % self.jetBranchName, "F", lenVar=self.lenVar)
         self.out.branch("%s_mass_raw" % self.jetBranchName, "F", lenVar=self.lenVar)
         self.out.branch("%s_mass_nom" % self.jetBranchName, "F", lenVar=self.lenVar)
-        self.out.branch("MET_pt_nom" , "F")
-        self.out.branch("MET_phi_nom", "F")
+        self.out.branch("%s_pt_nom" % self.metBranchName, "F")
+        self.out.branch("%s_phi_nom" % self.metBranchName, "F")
             
                         
     def endFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
@@ -57,7 +58,7 @@ class jetRecalib(Module):
     def analyze(self, event):
         """process event, return True (go to next module) or False (fail, go to next event)"""
         jets = Collection(event, self.jetBranchName )
-        met = Object(event, "MET") 
+        met = Object(event, self.metBranchName) 
 
         jets_pt_raw = []
         jets_pt_nom = []
@@ -84,12 +85,17 @@ class jetRecalib(Module):
                 jet_pt_nom *= -1.0
             jets_pt_nom    .append(jet_pt_nom)
 
+            if hasattr(jet, "rawFactor"):
+                jet_rawpt = jet_pt * (1 - jet.rawFactor)
+            else:
+                jet_rawpt = -1.0 * jet_pt #If factor not present factor will be saved as -1. Done for consistency with jetmetUncertainty module, but why not put the rawpt to zero instead?
+
             jet_mass_nom         = jet_mass
             if jet_mass_nom < 0.0:
                 jet_mass_nom *= -1.0
             jets_mass_nom    .append(jet_mass_nom)
 
-            if jet_pt_nom > 15.:
+            if jet_pt_nom > 15. and not (self.metBranchName == 'METFixEE2017' and 2.65<abs(jet.eta)<3.14 and jet_rawpt < 50):
                 jet_cosPhi = math.cos(jet.phi)
                 jet_sinPhi = math.sin(jet.phi)
                 met_px_nom = met_px_nom - (jet_pt_nom - jet.pt)*jet_cosPhi
@@ -98,8 +104,8 @@ class jetRecalib(Module):
         self.out.fillBranch("%s_pt_nom" % self.jetBranchName, jets_pt_nom)
         self.out.fillBranch("%s_mass_raw" % self.jetBranchName, jets_mass_raw)
         self.out.fillBranch("%s_mass_nom" % self.jetBranchName, jets_mass_nom)
-        self.out.fillBranch("MET_pt_nom", math.sqrt(met_px_nom**2 + met_py_nom**2))
-        self.out.fillBranch("MET_phi_nom", math.atan2(met_py_nom, met_px_nom))        
+        self.out.fillBranch("%s_pt_nom" % self.metBranchName, math.sqrt(met_px_nom**2 + met_py_nom**2))
+        self.out.fillBranch("%s_phi_nom" % self.metBranchName, math.atan2(met_py_nom, met_px_nom))        
 
         return True
 
