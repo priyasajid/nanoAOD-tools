@@ -21,7 +21,7 @@ class jetmetUncertaintiesProducer(Module):
         #--------------------------------------------------------------------------------------------
 
         self.jesUncertainties = jesUncertainties
-
+        self.doJERSmearing = doJERSmearing
         # smear jet pT to account for measured difference in JER between data and simulation.
         if era == "2016":
             self.jerInputFileName = "Summer16_25nsV1_MC_PtResolution_" + jetType + ".txt"
@@ -277,7 +277,7 @@ class jetmetUncertaintiesProducer(Module):
             ( jet_pt_jerNomVal, jet_pt_jerUpVal, jet_pt_jerDownVal ) = self.jetSmearer.getSmearValsPt(jet, genJet, rho)
             jets_corr_JER.append(jet_pt_jerNomVal)
             
-            jet_pt_nom           = jet_pt_jerNomVal *jet_pt if doJERSmearing else jet_pt
+            jet_pt_nom           = jet_pt_jerNomVal *jet_pt if self.doJERSmearing else jet_pt
             if jet_pt_nom < 0.0:
                 jet_pt_nom *= -1.0
             jet_pt_jerUp         = jet_pt_jerUpVal  *jet_pt
