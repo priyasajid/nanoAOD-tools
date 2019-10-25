@@ -110,7 +110,7 @@ class METSigProducer(Module):
             sumPtFromJets = 0
             cleanJets = []
             for j in jets:
-                uncorrectJER = j.corr_JER if not var in ['_jerUp', '_jer', '_jerDown'] else 1
+                correctJER = j.corr_JER if var in ['_jer'] else 1
                 clean = True
                 for coll in [electrons,muons,photons]:
                     for l in coll:
@@ -118,16 +118,16 @@ class METSigProducer(Module):
                             clean = False
                 if clean:
                     if not (self.vetoEtaRegion[0] < abs(j.eta) < self.vetoEtaRegion[1]):
-                        if getattr(j, jetPtVar)/uncorrectJER > self.jetThreshold:
+                        if getattr(j, jetPtVar)*correctJER > self.jetThreshold:
                             cleanJets += [j]
                         else:
-                            sumPtFromJets += getattr(j, jetPtVar)/uncorrectJER
+                            sumPtFromJets += getattr(j, jetPtVar)*correctJER
 
             # get the JER
             jet = ROOT.JME.JetParameters()
             for j in cleanJets:
-                uncorrectJER = j.corr_JER if not var in ['_jerUp', '_jer', '_jerDown'] else 1
-                jet.setJetEta(j.eta).setJetPt(getattr(j, jetPtVar)/uncorrectJER).setRho(rho)
+                correctJER = j.corr_JER if var in ['_jer'] else 1
+                jet.setJetEta(j.eta).setJetPt(getattr(j, jetPtVar)/correctJER).setRho(rho)
                 j.dpt   = self.res_pt.getResolution(jet)
                 j.dphi  = self.res_phi.getResolution(jet)
 
@@ -137,13 +137,13 @@ class METSigProducer(Module):
             i = 0
             for j in cleanJets:
                 index       = self.getBin(abs(j.eta))
-                uncorrectJER = j.corr_JER if not var in ['_jerUp', '_jer', '_jerDown'] else 1
-                jet_index   = 0 if getattr(j, jetPtVar)/uncorrectJER < 40 else 1 # split into high/low pt jets
+                correctJER = j.corr_JER if var in ['_jer'] else 1
+                jet_index   = 0 if getattr(j, jetPtVar)*correctJER < 40 else 1 # split into high/low pt jets
 
                 cj = math.cos(j.phi)
                 sj = math.sin(j.phi)
-                dpt = self.pars[2*index + jet_index] * getattr(j, jetPtVar)/uncorrectJER * j.dpt
-                dph =                                  getattr(j, jetPtVar)/uncorrectJER * j.dphi
+                dpt = self.pars[2*index + jet_index] * getattr(j, jetPtVar)*correctJER * j.dpt
+                dph =                                  getattr(j, jetPtVar)*correctJER * j.dphi
 
                 dpt *= dpt
                 dph *= dph
