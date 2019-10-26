@@ -127,7 +127,7 @@ class METSigProducer(Module):
             jet = ROOT.JME.JetParameters()
             for j in cleanJets:
                 correctJER = j.corr_JER if var in ['_jer'] else 1
-                jet.setJetEta(j.eta).setJetPt(getattr(j, jetPtVar)/correctJER).setRho(rho)
+                jet.setJetEta(j.eta).setJetPt(getattr(j, jetPtVar)*correctJER).setRho(rho)
                 j.dpt   = self.res_pt.getResolution(jet)
                 j.dphi  = self.res_phi.getResolution(jet)
 
