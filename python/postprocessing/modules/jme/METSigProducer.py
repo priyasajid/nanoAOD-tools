@@ -11,12 +11,13 @@ from PhysicsTools.NanoAODTools.postprocessing.framework.eventloop import Module
 
 class METSigProducer(Module):
 
-    def __init__(self, JERera, parameters, METCollection="MET", useRecorr=True, calcVariations=False, jetThreshold=15., vetoEtaRegion=(10,10)):
+    def __init__(self, JERera, parameters, METCollection="MET", useRecorr=True, calcVariations=False, jetThreshold=15., vetoEtaRegion=(10,10), outputBranch="MET"):
         jetCorrParam = ROOT.JetCorrectorParameters()
 
         self.pars               = parameters
         self.JERera             = JERera
         self.METCollection      = METCollection
+        self.outputBranch       = outputBranch
         self.useRecorr          = useRecorr
         self.calcVariations     = calcVariations
         self.jetThreshold       = jetThreshold
@@ -51,10 +52,10 @@ class METSigProducer(Module):
 
     def beginFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
         self.out = wrappedOutputTree
-        self.out.branch("MET_significance", "F")
+        self.out.branch("%s_significance"%self.outputBranch, "F")
         if self.calcVariations:
             for var in ['_jesTotalUp', '_jesTotalDown', '_jer', '_jerUp', '_jerDown', '_unclustEnUp', '_unclustEnDown']:
-                self.out.branch("MET_significance"+var, "F")
+                self.out.branch("%s_significance"%self.outputBranch+var, "F")
         #self.out.branch("MET_significance_nom", "F")
 
     def endFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
@@ -197,9 +198,9 @@ class METSigProducer(Module):
             #MET_sig_old = met.significance
             #self.out.fillBranch("MET_significance_nom", float(MET_sig_old))
             if var == '' or var == '_nom':
-                self.out.fillBranch("MET_significance", MET_sig)
+                self.out.fillBranch("%s_significance"%self.outputBranch, MET_sig)
             else:
-                self.out.fillBranch("MET_significance"+var, MET_sig)
+                self.out.fillBranch("%s_significance"%self.outputBranch+var, MET_sig)
 
         return True
 
