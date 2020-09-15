@@ -6,9 +6,13 @@ from PhysicsTools.NanoAODTools.postprocessing.modules.jme.jetmetUncertainties im
 from PhysicsTools.NanoAODTools.postprocessing.modules.jme.fatJetUncertainties import *
 
 # JEC dict
-jecTagsMC = {'2016' : 'Summer16_07Aug2017_V11_MC', 
-             '2017' : 'Fall17_17Nov2017_V32_MC', 
-             '2018' : 'Autumn18_V19_MC'}
+#jecTagsMC = {'2016' : 'Summer16_07Aug2017_V11_MC', 
+#             '2017' : 'Fall17_17Nov2017_V32_MC', 
+#             '2018' : 'Autumn18_V19_MC'}
+
+jecTagsMC = {'2016' : 'Regrouped_Summer16_07Aug2017_V11_MC', 
+             '2017' : 'Regrouped_Fall17_17Nov2017_V32_MC', 
+             '2018' : 'Regrouped_Autumn18_V19_MC'}
 
 jecTagsFastSim = {'2016' : 'Summer16_FastSimV1_MC',
                   '2017' : 'Fall17_FastSimV1_MC',
